@@ -73,7 +73,7 @@ class ResNet50DownBlock(nn.Module):
         )
 
     def forward(self, x):
-        x_shortcut = self.extra(x)
+        x_shortcut = self.downsample(x)
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
@@ -141,7 +141,7 @@ class ResNet50(nn.Module):
 
         # self.avgpool = nn.AvgPool2d(kernel_size=7, stride=1, ceil_mode=False)
         # self.avgpool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
-
+        # TODO: disable the latent
         self.latent = nn.Sequential(
             nn.Linear(2048, 1024),
             nn.BatchNorm1d(1024),
@@ -150,12 +150,11 @@ class ResNet50(nn.Module):
         )
 
     def forward(self, x):
-        out = self.conv1(x)
-        out = self.maxpool(out)
-        out = self.layer1(out)
-        out = self.layer2(out)
-        out = self.layer3(out)
-        out = self.layer4(out)
+        out = self.stage0(x)
+        out = self.stage1(out)
+        out = self.stage2(out)
+        out = self.stage3(out)
+        out = self.stage4(out)
         out = F.adaptive_avg_pool2d(out, 1)
 
         # out = out.reshape(x.shape[0], -1)
@@ -253,6 +252,32 @@ class disGrad(nn.Module):
         gender_encode = self.gender_encoder(gender)
 
         return self.MLP(torch.cat((ori_feature, gender_encode), dim=-1))
+
+class disOri(nn.Module):
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.gradEmbed = ResNet50(start_channels=8)
+
+        self.gender_encoder = nn.Sequential(
+            nn.Linear(1, 32),
+            nn.BatchNorm1d(32),
+            nn.ReLU()
+        )
+
+
+        self.MLP = nn.Sequential(
+            nn.Linear(1024 + 32, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
+            nn.Linear(512, 1)
+        )
+
+    def forward(self, grad, gender):
+        grad_feature = self.gradEmbed(grad)
+        gender_encode = self.gender_encoder(gender)
+
+        return self.MLP(torch.cat((grad_feature, gender_encode), dim=-1))
 
 
 
