@@ -217,13 +217,13 @@ def train_fn(net, train_loader, loss_fn, epoch, optimizer):
         # zero the parameter gradients
         optimizer.zero_grad()
         # forward
-        y_pred = net(image, grad, gender)
+        CLoss, y_pred = net(image, grad, gender)
         y_pred = y_pred.squeeze()
         label = label.squeeze()
         # print(y_pred, label)
         loss = loss_fn(y_pred, label)
         # backward,calculate gradients
-        total_loss = loss + L1_penalty(net, 1e-5)
+        total_loss = loss + L1_penalty(net, 1e-5) + CLoss
         total_loss.backward()
         # backward,update parameter
         optimizer.step()
@@ -249,7 +249,7 @@ def evaluate_fn(net, val_loader):
 
             label = data[1].cuda()
 
-            y_pred = net(image, grad, gender)
+            _, y_pred = net(image, grad, gender)
             # y_pred = net(image, gender)
             y_pred = (y_pred.cpu() * boneage_div) + boneage_mean
             label = label.cpu()
@@ -280,7 +280,7 @@ def map_fn(flags, data_dir, grad_dir, k):
     # gpus = [0, 1]
     # torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 
-    mymodel = fusion_ori_grad().cuda()
+    mymodel = fusion_ori_grad(flags['batch_size']).cuda()
     #   mymodel.load_state_dict(torch.load('/content/drive/My Drive/BAA/resnet50_pr_2/best_resnet50_pr_2.bin'))
     # mymodel = nn.DataParallel(mymodel.cuda(), device_ids=gpus, output_device=gpus[0])
 
@@ -370,7 +370,7 @@ def map_fn(flags, data_dir, grad_dir, k):
             batch_size = len(data[1])
             label = data[1].cuda()
 
-            y_pred = mymodel(image, grad, gender)
+            _, y_pred = mymodel(image, grad, gender)
 
             output = (y_pred.cpu() * boneage_div) + boneage_mean
             label = (label.cpu() * boneage_div) + boneage_mean
@@ -404,7 +404,7 @@ def map_fn(flags, data_dir, grad_dir, k):
             batch_size = len(data[1])
             label = data[1].cuda()
 
-            y_pred = mymodel(image, grad, gender)
+            _, y_pred = mymodel(image, grad, gender)
 
             output = (y_pred.cpu() * boneage_div) + boneage_mean
             label = label.cpu()

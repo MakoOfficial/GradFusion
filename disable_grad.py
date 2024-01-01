@@ -180,7 +180,7 @@ def create_data_loader(train_df, val_df, train_root, val_root):
 def L1_penalty(net, alpha):
     l1_penalty = torch.nn.L1Loss(size_average=False)
     loss = 0
-    for param in net.fc.parameters():
+    for param in net.MLP.parameters():
         loss += torch.sum(torch.abs(param))
 
     return alpha * loss
