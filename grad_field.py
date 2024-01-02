@@ -142,12 +142,12 @@ class ResNet50(nn.Module):
         # self.avgpool = nn.AvgPool2d(kernel_size=7, stride=1, ceil_mode=False)
         # self.avgpool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
         # TODO: disable the latent
-        self.latent = nn.Sequential(
-            nn.Linear(2048, 1024),
-            nn.BatchNorm1d(1024),
-            nn.ReLU(),
-            nn.Linear(1024, 1024)
-        )
+        # self.latent = nn.Sequential(
+        #     nn.Linear(2048, 1024),
+        #     nn.BatchNorm1d(1024),
+        #     nn.ReLU(),
+        #     nn.Linear(1024, 1024)
+        # )
 
     def forward(self, x):
         out = self.stage0(x)
@@ -159,7 +159,8 @@ class ResNet50(nn.Module):
 
         # out = out.reshape(x.shape[0], -1)
         # out = self.fc(out)
-        return self.latent(out.squeeze())
+        # return self.latent(out.squeeze())
+        return out.squeeze()
 
 
 class fusion_ori_grad(nn.Module):
@@ -241,7 +242,10 @@ class disGrad(nn.Module):
 
 
         self.MLP = nn.Sequential(
-            nn.Linear(1024 + 32, 512),
+            nn.Linear(2048 + 32, 1024),
+            nn.BatchNorm1d(1024),
+            nn.ReLU(),
+            nn.Linear(1024, 512),
             nn.BatchNorm1d(512),
             nn.ReLU(),
             nn.Linear(512, 1)
@@ -267,7 +271,10 @@ class disOri(nn.Module):
 
 
         self.MLP = nn.Sequential(
-            nn.Linear(1024 + 32, 512),
+            nn.Linear(2048 + 32, 1024),
+            nn.BatchNorm1d(1024),
+            nn.ReLU(),
+            nn.Linear(1024, 512),
             nn.BatchNorm1d(512),
             nn.ReLU(),
             nn.Linear(512, 1)

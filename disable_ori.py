@@ -203,6 +203,7 @@ def train_fn(net, train_loader, loss_fn, epoch, optimizer):
 
     net.train()
     for batch_idx, data in enumerate(train_loader):
+        batch_start = time.time()
         image, gender = data[0]
         image, gender = image.type(torch.FloatTensor).cuda(), gender.type(torch.FloatTensor).cuda()
 
@@ -212,6 +213,8 @@ def train_fn(net, train_loader, loss_fn, epoch, optimizer):
         # zero the parameter gradients
         optimizer.zero_grad()
         # forward
+        run_start = time.time()
+        print(f"load a batch successful, cost time {round(run_start - batch_start, 1)}")
         y_pred = net(image, gender)
         y_pred = y_pred.squeeze()
         label = label.squeeze()
@@ -222,6 +225,7 @@ def train_fn(net, train_loader, loss_fn, epoch, optimizer):
         total_loss.backward()
         # backward,update parameter
         optimizer.step()
+        print(f"run a batch successful, cost time {round(time.time() - run_start, 1)}")
         batch_loss = loss.item()
 
         training_loss += batch_loss
