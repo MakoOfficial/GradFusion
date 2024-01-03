@@ -250,6 +250,12 @@ class disGrad(nn.Module):
             nn.ReLU(),
             nn.Linear(512, 1)
         )
+        # self.MLP = nn.Sequential(
+        #     nn.Linear(1024 + 32, 512),
+        #     nn.BatchNorm1d(512),
+        #     nn.ReLU(),
+        #     nn.Linear(512, 1)
+        # )
 
     def forward(self, ori, gender):
         ori_feature = self.oriEmbed(ori)
@@ -270,6 +276,17 @@ class disOri(nn.Module):
         )
 
 
+        # self.MLP = nn.Sequential(
+        #     nn.Linear(2048 + 32, 1024),
+        #     nn.BatchNorm1d(1024),
+        #     nn.ReLU(),
+        #     nn.Linear(1024, 512),
+        #     nn.BatchNorm1d(512),
+        #     nn.ReLU(),
+        #     nn.Linear(512, 1)
+        # )
+
+        # cross-entropy
         self.MLP = nn.Sequential(
             nn.Linear(2048 + 32, 1024),
             nn.BatchNorm1d(1024),
@@ -277,8 +294,27 @@ class disOri(nn.Module):
             nn.Linear(1024, 512),
             nn.BatchNorm1d(512),
             nn.ReLU(),
-            nn.Linear(512, 1)
+            nn.Linear(512, 230),
+            nn.Softmax()
         )
+
+        # Tj set
+        # self.MLP = nn.Sequential(
+        #     nn.Linear(in_features=2048 + 64, out_features=1024),
+        #     nn.Dropout(0.5),
+        #     nn.Linear(in_features=1024, out_features=512),
+        #     nn.Dropout(0.5),
+        #     nn.Linear(in_features=512, out_features=230),
+        #     nn.Softmax()
+        # )
+
+        # self.MLP = nn.Sequential(
+        #     nn.Linear(1024 + 32, 512),
+        #     nn.BatchNorm1d(512),
+        #     nn.ReLU(),
+        #     nn.Linear(512, 1)
+        # )
+
 
     def forward(self, grad, gender):
         grad_feature = self.gradEmbed(grad)
