@@ -210,13 +210,15 @@ def train_fn(net, teacher, train_loader, loss_fn, criterionKD, epoch, optimizer)
         label = label.squeeze()
         cls_loss = loss_fn(y_pred, label)
         logit = teacher.teach_Logit(image, gender)
-        kd_loss = criterionKD(F.log_softmax(y_pred/temper, dim=1), F.log_softmax(logit/temper, dim=1)) * lambda_kd
+        kd_loss = criterionKD((y_pred / temper),
+                              F.softmax(logit.detach() / temper, dim=1)) * lambda_kd
         # backward,calculate gradients
         total_loss = alpha*cls_loss + (1.-alpha)*kd_loss*temper*temper + L1_penalty(net, 1e-5)
+        # total_loss = kd_loss * temper * temper
         total_loss.backward()
         # backward,update parameter
         optimizer.step()
-        batch_loss = total_loss.data.item()
+        batch_loss = total_loss.item()
 
         training_loss += batch_loss
         total_size += batch_size
@@ -308,7 +310,8 @@ def map_fn(flags, data_dir, k):
     # loss_fn = nn.L1Loss(reduction='sum')
     # loss_fn = nn.BCELoss(reduction='sum')
     loss_fn = nn.CrossEntropyLoss(reduction='sum')
-    criterionKD = nn.KLDivLoss(reduction='sum')
+    # criterionKD = nn.BCELoss(reduction='sum')
+    criterionKD = nn.CrossEntropyLoss(reduction='sum')
     lr = flags['lr']
 
     wd = 0
@@ -440,8 +443,8 @@ if __name__ == "__main__":
     alpha = 0.7
 
     train_df = pd.read_csv(f'../archive/boneage-training-dataset.csv')
-    # train_ori_dir = '../../autodl-tmp/grad_4K_fold/'
-    train_ori_dir = '../archive/masked_1K_fold/'
+    train_ori_dir = '../../autodl-tmp/grad_4K_fold/'
+    # train_ori_dir = '../archive/masked_1K_fold/'
     # only run one fold
     print(f'fold 1/5')
     map_fn(flags, data_dir=train_ori_dir, k=1)
