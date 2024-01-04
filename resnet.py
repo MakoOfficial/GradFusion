@@ -53,8 +53,14 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(256, 512, blocks[3], stride=2)
 
         # 分类用的全连接
-        self.MLP = nn.Linear(512, num_classes)
+        self.MLP = nn.Linear(512+32, num_classes)
         self.softmax = nn.Softmax()
+
+        self.gender_encoder = nn.Sequential(
+            nn.Linear(1, 32),
+            nn.BatchNorm1d(32),
+            nn.ReLU()
+        )
 
     def _make_layer(self, inchannel, outchannel, block_num, stride=1):
         """
@@ -73,7 +79,7 @@ class ResNet(nn.Module):
             layers.append(ResidualBlock(outchannel, outchannel))
         return nn.Sequential(*layers)
 
-    def forward(self, x):
+    def forward(self, x, gender):
         x = self.pre(x)
         l1_out = self.layer1(x)
         l2_out = self.layer2(l1_out)
@@ -81,7 +87,10 @@ class ResNet(nn.Module):
         l4_out = self.layer4(l3_out)
         p_out = F.adaptive_avg_pool2d(l4_out, 1)
         fea = p_out.view(p_out.size(0), -1)
-        out = self.MLP(fea)
+
+        gender_encode = self.gender_encoder(gender)
+
+        out = self.MLP(torch.cat((fea, gender_encode), dim=-1))
         return l1_out, l2_out, l3_out, l4_out, fea, self.softmax(out)
 
 def ResNet18():

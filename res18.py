@@ -151,6 +151,7 @@ class BAAValDataset(Dataset):
             # change the type of gender, change bool variable to float32
             df['male'] = df['male'].astype('float32')
             df['bonage'] = df['boneage'].astype('float32')
+
             return df
 
         self.df = preprocess_df(df)
@@ -187,12 +188,11 @@ def train_fn(net, train_loader, loss_fn, epoch, optimizer):
 
     net.train()
     for batch_idx, data in enumerate(train_loader):
-        batch_start = time.time()
         image, gender = data[0]
         image, gender = image.type(torch.FloatTensor).cuda(), gender.type(torch.FloatTensor).cuda()
 
         batch_size = len(data[1])
-        label = F.one_hot(data[1]-1, num_classes=230).float().cuda()
+        label = (data[1]-1).type(torch.LongTensor).cuda()
 
         # zero the parameter gradients
         optimizer.zero_grad()
@@ -295,7 +295,8 @@ def map_fn(flags, data_dir, k):
     best_loss = float('inf')
     #   loss_fn =  nn.MSELoss(reduction = 'sum')
     # loss_fn = nn.L1Loss(reduction='sum')
-    loss_fn = nn.BCELoss(reduction='sum')
+    # loss_fn = nn.BCELoss(reduction='sum')
+    loss_fn = nn.CrossEntropyLoss(reduction='sum')
     lr = flags['lr']
 
     wd = 0
@@ -417,7 +418,7 @@ if __name__ == "__main__":
     flags = {}
     flags['lr'] = args.lr
     flags['batch_size'] = args.batch_size
-    flags['num_workers'] = 2
+    flags['num_workers'] = 16
     flags['num_epochs'] = args.num_epochs
     flags['seed'] = args.seed
 
