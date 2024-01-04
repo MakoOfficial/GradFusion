@@ -149,18 +149,32 @@ class ResNet50(nn.Module):
         #     nn.Linear(1024, 1024)
         # )
 
+    # training
+    # def forward(self, x):
+    #     out = self.stage0(x)
+    #     out = self.stage1(out)
+    #     out = self.stage2(out)
+    #     out = self.stage3(out)
+    #     out = self.stage4(out)
+    #     out = F.adaptive_avg_pool2d(out, 1)
+    #
+    #     # out = out.reshape(x.shape[0], -1)
+    #     # out = self.fc(out)
+    #     # return self.latent(out.squeeze())
+    #     return out.squeeze()
+
     def forward(self, x):
         out = self.stage0(x)
-        out = self.stage1(out)
-        out = self.stage2(out)
-        out = self.stage3(out)
-        out = self.stage4(out)
-        out = F.adaptive_avg_pool2d(out, 1)
-
+        l1_out = self.stage1(out)
+        l2_out = self.stage2(l1_out)
+        l3_out = self.stage3(l2_out)
+        l4_out = self.stage4(l3_out)
+        p_out = F.adaptive_avg_pool2d(l4_out, 1)
+        fea = p_out.view(p_out.size(0), -1)
         # out = out.reshape(x.shape[0], -1)
         # out = self.fc(out)
         # return self.latent(out.squeeze())
-        return out.squeeze()
+        return l1_out, l2_out, l3_out, l4_out, fea
 
 
 class fusion_ori_grad(nn.Module):
@@ -295,9 +309,10 @@ class disOri(nn.Module):
             nn.BatchNorm1d(512),
             nn.ReLU(),
             nn.Linear(512, 230),
-            nn.Softmax()
+            # nn.Softmax()
         )
 
+        self.softmax = nn.Softmax()
         # Tj set
         # self.MLP = nn.Sequential(
         #     nn.Linear(in_features=2048 + 64, out_features=1024),
@@ -317,10 +332,16 @@ class disOri(nn.Module):
 
 
     def forward(self, grad, gender):
-        grad_feature = self.gradEmbed(grad)
+        _, _, _, _, grad_feature = self.gradEmbed(grad)
         gender_encode = self.gender_encoder(gender)
 
-        return self.MLP(torch.cat((grad_feature, gender_encode), dim=-1))
+        return self.softmax(self.MLP(torch.cat((grad_feature, gender_encode), dim=-1)))
+
+    def teach(self, grad, gender):
+        l1, l2, l3, l4, grad_feature = self.gradEmbed(grad)
+        gender_encode = self.gender_encoder(gender)
+
+        return l1, l2, l3, l4, grad_feature, self.MLP(torch.cat((grad_feature, gender_encode), dim=-1))
 
 
 
