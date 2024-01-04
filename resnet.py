@@ -2,6 +2,8 @@ import torch
 import torchvision
 from torch import nn
 from torch.nn import functional as F
+
+
 # from torchsummary import summary
 
 
@@ -53,8 +55,9 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(256, 512, blocks[3], stride=2)
 
         # 分类用的全连接
-        self.MLP = nn.Linear(512+32, num_classes)
-        self.softmax = nn.Softmax()
+        # TODO: add a linear layer in MLP, and it's dim is larger than input
+        self.MLP = nn.Linear(512 + 32, num_classes)
+        # self.softmax = nn.Softmax()
 
         self.gender_encoder = nn.Sequential(
             nn.Linear(1, 32),
@@ -91,7 +94,8 @@ class ResNet(nn.Module):
         gender_encode = self.gender_encoder(gender)
 
         out = self.MLP(torch.cat((fea, gender_encode), dim=-1))
-        return l1_out, l2_out, l3_out, l4_out, fea, self.softmax(out)
+        return l1_out, l2_out, l3_out, l4_out, fea, out
+
 
 def ResNet18():
     return ResNet([2, 2, 2, 2])

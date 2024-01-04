@@ -337,11 +337,17 @@ class disOri(nn.Module):
 
         return self.softmax(self.MLP(torch.cat((grad_feature, gender_encode), dim=-1)))
 
-    def teach(self, grad, gender):
+    def teach_IRG(self, grad, gender):
         l1, l2, l3, l4, grad_feature = self.gradEmbed(grad)
         gender_encode = self.gender_encoder(gender)
 
         return l1, l2, l3, l4, grad_feature, self.MLP(torch.cat((grad_feature, gender_encode), dim=-1))
+
+    def teach_Logit(self, grad, gender):
+        l1, l2, l3, l4, grad_feature = self.gradEmbed(grad)
+        gender_encode = self.gender_encoder(gender)
+
+        return self.MLP(torch.cat((grad_feature, gender_encode), dim=-1))
 
 
 
