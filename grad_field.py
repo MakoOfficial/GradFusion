@@ -262,7 +262,8 @@ class disGrad(nn.Module):
             nn.Linear(1024, 512),
             nn.BatchNorm1d(512),
             nn.ReLU(),
-            nn.Linear(512, 1)
+            # nn.Linear(512, 1)
+            nn.Linear(512, 230)
         )
         # self.MLP = nn.Sequential(
         #     nn.Linear(1024 + 32, 512),
@@ -272,7 +273,7 @@ class disGrad(nn.Module):
         # )
 
     def forward(self, ori, gender):
-        ori_feature = self.oriEmbed(ori)
+        _, _, _, _, ori_feature = self.oriEmbed(ori)
         gender_encode = self.gender_encoder(gender)
 
         return self.MLP(torch.cat((ori_feature, gender_encode), dim=-1))
