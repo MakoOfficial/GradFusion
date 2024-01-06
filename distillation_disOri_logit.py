@@ -429,7 +429,7 @@ if __name__ == "__main__":
     parser.add_argument('seed', type=int)
     args = parser.parse_args()
     save_path = '../../autodl-tmp/distillation_disOri_Logit'
-    # os.makedirs(save_path, exist_ok=True)
+    os.makedirs(save_path, exist_ok=True)
 
 
     flags = {}

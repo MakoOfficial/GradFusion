@@ -117,9 +117,13 @@ transform_val = Compose([
 ])
 
 
-def read_grad(path):
-    img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-    return img.reshape((8, 512, 512)).transpose(1, 2, 0)
+def read_image_Image(path):
+    img = Image.open(path)
+    return np.array(img.convert("RGB"))
+
+def read_image(path):
+    img = cv2.imread(path, cv2.IMREAD_COLOR)
+    return img
 
 
 class BAATrainDataset(Dataset):
@@ -138,8 +142,9 @@ class BAATrainDataset(Dataset):
     def __getitem__(self, index):
         row = self.df.iloc[index]
         num = int(row['id'])
-        return (transform_train(image=read_grad(f"{self.file_path}/{num}.png"))['image'],
-                # Tensor([row['male']])), Tensor([row['boneage']]).to(torch.int64)
+        # return (transform_train(image=read_image(f"{self.file_path}/{num}.png"))['image'],
+        #         Tensor([row['male']])), row['boneage']
+        return (transform_train(image=cv2.imread(f"{self.file_path}/{num}.png", cv2.IMREAD_COLOR))['image'],
                 Tensor([row['male']])), row['boneage']
 
     def __len__(self):
@@ -159,7 +164,8 @@ class BAAValDataset(Dataset):
 
     def __getitem__(self, index):
         row = self.df.iloc[index]
-        return (transform_val(image=read_grad(f"{self.file_path}/{int(row['id'])}.png"))['image'],
+        # return (transform_val(image=read_image(f"{self.file_path}/{int(row['id'])}.png"))['image'],
+        return (transform_train(image=cv2.imread(f"{self.file_path}/{int(row['id'])}.png", cv2.IMREAD_COLOR))['image'],
                 Tensor([row['male']])), row['boneage']
 
     def __len__(self):
@@ -209,7 +215,7 @@ def train_fn(net, teacher, train_loader, loss_fn, criterionKD, epoch, optimizer)
         y_pred = y_pred.squeeze()
         label = label.squeeze()
         cls_loss = loss_fn(y_pred, label)
-        logit = teacher.teach_Logit(image, gender)
+        logit = teacher(image, gender)
         kd_loss = criterionKD((y_pred / temper),
                               F.softmax(logit.detach() / temper, dim=1)) * lambda_kd
         # backward,calculate gradients
@@ -260,7 +266,7 @@ def reduce_fn(vals):
 import time
 
 def map_fn(flags, data_dir, k):
-    model_name = f'res18_IRG{k}'
+    model_name = f'res18_ori{k}'
     # path = f'{root}/{model_name}_fold{k}'
     # Sets a common random seed - both for initialization and ensuring graph is the same
     # seed_everything(seed=flags['seed'])
@@ -270,9 +276,9 @@ def map_fn(flags, data_dir, k):
     # torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 
     #   mymodel = BAA_base(32)
-    mymodel = ResNet18().cuda()
+    mymodel = ResNet18(startChannel=3).cuda()
     teacher = disGrad().cuda()
-    print(teacher.load_state_dict(torch.load('./disori_CE_fold1.bin'), strict=True))
+    print(teacher.load_state_dict(torch.load('./disGrad_CE_fold1.bin'), strict=True))
     teacher.eval()
     # mymodel = nn.DataParallel(mymodel.cuda(), device_ids=gpus, output_device=gpus[0])
 
@@ -429,13 +435,13 @@ if __name__ == "__main__":
     parser.add_argument('seed', type=int)
     args = parser.parse_args()
     save_path = '../../autodl-tmp/distillation_disGrad_Logit'
-    # os.makedirs(save_path, exist_ok=True)
+    os.makedirs(save_path, exist_ok=True)
 
 
     flags = {}
     flags['lr'] = args.lr
     flags['batch_size'] = args.batch_size
-    flags['num_workers'] = 16
+    flags['num_workers'] = 8
     flags['num_epochs'] = args.num_epochs
     flags['seed'] = args.seed
     lambda_kd = 1.0

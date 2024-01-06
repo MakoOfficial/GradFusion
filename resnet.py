@@ -97,8 +97,8 @@ class ResNet(nn.Module):
         return l1_out, l2_out, l3_out, l4_out, fea, out
 
 
-def ResNet18():
-    return ResNet([2, 2, 2, 2])
+def ResNet18(startChannel=8):
+    return ResNet([2, 2, 2, 2], start_channel=startChannel)
 
 
 def ResNet34():
