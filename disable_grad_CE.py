@@ -117,11 +117,6 @@ transform_val = Compose([
 ])
 
 
-def read_image(path):
-    img = Image.open(path)
-    return np.array(img.convert("RGB"))
-
-
 class BAATrainDataset(Dataset):
     def __init__(self, df, file_path):
         def preprocess_df(df):
@@ -138,7 +133,7 @@ class BAATrainDataset(Dataset):
     def __getitem__(self, index):
         row = self.df.iloc[index]
         num = int(row['id'])
-        return (transform_train(image=read_image(f"{self.file_path}/{num}.png"))['image'],
+        return (transform_train(image=cv2.imread(f"{self.file_path}/{num}.png", cv2.IMREAD_COLOR))['image'],
                 Tensor([row['male']])), row['boneage']
 
     def __len__(self):
@@ -158,7 +153,7 @@ class BAAValDataset(Dataset):
 
     def __getitem__(self, index):
         row = self.df.iloc[index]
-        return (transform_val(image=read_image(f"{self.file_path}/{int(row['id'])}.png"))['image'],
+        return (transform_val(image=cv2.imread(f"{self.file_path}/{int(row['id'])}.png", cv2.IMREAD_COLOR))['image'],
                 Tensor([row['male']])), row['boneage']
 
     def __len__(self):
@@ -237,8 +232,8 @@ def evaluate_fn(net, val_loader):
 
             y_pred = net(image, gender)
             # y_pred = net(image, gender)
-            y_pred = torch.argmax(y_pred.cpu(), dim=1)+1
-            label = label.cpu()
+            y_pred = torch.argmax(y_pred, dim=1)+1
+            label = label
 
             y_pred = y_pred.squeeze()
             label = label.squeeze()
@@ -256,7 +251,7 @@ def reduce_fn(vals):
 import time
 
 def map_fn(flags, data_dir, k):
-    model_name = f'disGrad_CE_fold{k}'
+    model_name = f'disGrad_CE_MaskAll{k}'
     # path = f'{root}/{model_name}_fold{k}'
     # Sets a common random seed - both for initialization and ensuring graph is the same
     # seed_everything(seed=flags['seed'])
@@ -356,8 +351,8 @@ def map_fn(flags, data_dir, k):
 
             y_pred = mymodel(image, gender)
 
-            output = torch.argmax(y_pred.cpu(), dim=1) + 1
-            label = label.cpu()
+            output = torch.argmax(y_pred, dim=1) + 1
+            label = label
 
             output = torch.squeeze(output)
             label = torch.squeeze(label)
@@ -389,8 +384,8 @@ def map_fn(flags, data_dir, k):
 
             y_pred = mymodel(image, gender)
 
-            output = torch.argmax(y_pred.cpu(), dim=1) + 1
-            label = label.cpu()
+            output = torch.argmax(y_pred, dim=1) + 1
+            label = label
 
             output = torch.squeeze(output)
             label = torch.squeeze(label)
@@ -418,21 +413,21 @@ if __name__ == "__main__":
     parser.add_argument('num_epochs', type=int)
     parser.add_argument('seed', type=int)
     args = parser.parse_args()
-    save_path = '../../autodl-tmp/disGrad_CE'
+    save_path = '../../autodl-tmp/disGrad_CE_MaskAll'
     os.makedirs(save_path, exist_ok=True)
 
 
     flags = {}
     flags['lr'] = args.lr
     flags['batch_size'] = args.batch_size
-    flags['num_workers'] = 2
+    flags['num_workers'] = 8
     flags['num_epochs'] = args.num_epochs
     flags['seed'] = args.seed
 
     train_df = pd.read_csv(f'../archive/boneage-training-dataset.csv')
     boneage_mean = train_df['boneage'].mean()
     boneage_div = train_df['boneage'].std()
-    train_ori_dir = '../../autodl-tmp/masked_4K_fold/'
+    train_ori_dir = '../../autodl-tmp/MaskAll_fold/'
     # train_ori_dir = '../../autodl-tmp/ori_4K_fold/'
     # train_ori_dir = '../archive/masked_1K_fold/'
     print(f'fold 1/5')

@@ -128,26 +128,24 @@ def create_data_loader(train_df, val_df, train_root, val_root):
 
 
 def train_fn(train_loader):
-    for i in range(1, 5):
-        for batch_idx, data in enumerate(train_loader):
-            image, gender = data[0]
-            image, gender = image.type(torch.FloatTensor).cuda(), gender.type(torch.FloatTensor).cuda()
+    for batch_idx, data in enumerate(train_loader):
+        image, gender = data[0]
+        image, gender = image.type(torch.FloatTensor).cuda(), gender.type(torch.FloatTensor).cuda()
 
-            batch_size = len(data[1])
-            label = (data[1]-1).type(torch.LongTensor).cuda()
+        batch_size = len(data[1])
+        label = (data[1]-1).type(torch.LongTensor).cuda()
 
     return 0.
 
 
 def evaluate_fn(val_loader):
     with torch.no_grad():
-        for i in range(1, 5):
-            for batch_idx, data in enumerate(val_loader):
+        for batch_idx, data in enumerate(val_loader):
 
-                image, gender = data[0]
-                image, gender = image.type(torch.FloatTensor).cuda(), gender.type(torch.FloatTensor).cuda()
+            image, gender = data[0]
+            image, gender = image.type(torch.FloatTensor).cuda(), gender.type(torch.FloatTensor).cuda()
 
-                label = data[1].cuda()
+            label = data[1].cuda()
 
     return 0.
 
@@ -161,34 +159,16 @@ def map_fn(flags, data_dir, k):
 
     train_set, val_set = create_data_loader(train_df, val_df, os.path.join(fold_path, 'train'), os.path.join(fold_path, 'valid'))
     print(train_set.__len__())
-    # Creates dataloaders, which load data in batches
-    # Note: test loader is not shuffled or sampled
-    # train_loader = torch.utils.data.DataLoader(
-    #     train_set,
-    #     batch_size=flags['batch_size'],
-    #     shuffle=True,
-    #     num_workers=flags['num_workers'],
-    #     drop_last=True,
-    #     # pin_memory=True
-    # )
-    #
-    # val_loader = torch.utils.data.DataLoader(
-    #     val_set,
-    #     batch_size=flags['batch_size'],
-    #     shuffle=False,
-    #     num_workers=flags['num_workers'],
-    #     # pin_memory=True
-    # )
 
     ## Trains
-    for epoch in range(flags['num_epochs']):
+    for epoch in range(2, flags['num_epochs']):
         train_loader = torch.utils.data.DataLoader(
             train_set,
             batch_size=flags['batch_size'],
             shuffle=True,
             num_workers=epoch+1,
             drop_last=True,
-            # pin_memory=True
+            pin_memory=True
         )
 
         val_loader = torch.utils.data.DataLoader(
@@ -196,14 +176,14 @@ def map_fn(flags, data_dir, k):
             batch_size=flags['batch_size'],
             shuffle=False,
             num_workers=epoch+1,
-            # pin_memory=True
+            pin_memory=True
         )
         start_time = time.time()
         train_fn(train_loader)
 
         evaluate_fn(val_loader)
 
-        print(f'num_workers={epoch+1}, time : {(time.time() - start_time)/4}')
+        print(f'num_workers={epoch+1}, time : {(time.time() - start_time)}')
 
 if __name__ == "__main__":
     import argparse
@@ -224,9 +204,9 @@ if __name__ == "__main__":
     flags['seed'] = 1
 
     train_df = pd.read_csv(f'../../archive/boneage-training-dataset.csv')
-    # train_ori_dir = '../../../autodl-tmp/grad_4K_fold/'
+    train_ori_dir = '../../../autodl-tmp/MaskAll_fold/'
     # train_ori_dir = '../../archive/grad_1K_fold/'
-    train_ori_dir = '../../archive/masked_1K_fold/'
+    # train_ori_dir = '../../archive/masked_1K_fold/'
     # only run one fold
     print(f'load Ori')
     map_fn(flags, data_dir=train_ori_dir, k=1)

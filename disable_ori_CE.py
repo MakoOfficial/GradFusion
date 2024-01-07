@@ -425,23 +425,15 @@ if __name__ == "__main__":
     flags = {}
     flags['lr'] = args.lr
     flags['batch_size'] = args.batch_size
-    flags['num_workers'] = 2
+    flags['num_workers'] = 8
     flags['num_epochs'] = args.num_epochs
     flags['seed'] = args.seed
 
     train_df = pd.read_csv(f'../archive/boneage-training-dataset.csv')
     boneage_mean = train_df['boneage'].mean()
     boneage_div = train_df['boneage'].std()
-    train_ori_dir = '../../autodl-tmp/grad_4K_fold/'
+    train_ori_dir = '../../autodl-tmp/MaskAll_fold/'
     # train_ori_dir = '../../autodl-tmp/ori_4K_fold/'
     # train_ori_dir = '../archive/masked_1K_fold/'
     print(f'fold 1/5')
     map_fn(flags, data_dir=train_ori_dir, k=1)
-    print(f'fold 2/5')
-    map_fn(flags, data_dir=train_ori_dir, k=2)
-    print(f'fold 3/5')
-    map_fn(flags, data_dir=train_ori_dir, k=3)
-    print(f'fold 4/5')
-    map_fn(flags, data_dir=train_ori_dir, k=4)
-    print(f'fold 5/5')
-    map_fn(flags, data_dir=train_ori_dir, k=5)
