@@ -12,7 +12,7 @@ from albumentations.augmentations.transforms import Lambda, RandomBrightnessCont
 from albumentations.augmentations.geometric.transforms import ShiftScaleRotate, HorizontalFlip
 from albumentations.pytorch.transforms import ToTensorV2
 from albumentations.augmentations.crops.transforms import RandomResizedCrop
-from albumentations import Compose
+from albumentations import Compose, Resize
 import warnings
 import torchvision.transforms as transforms
 
@@ -53,7 +53,9 @@ def sample_normalize(image, **kwargs):
 
 transform_train = Compose([
     # RandomBrightnessContrast(p = 0.8),
-    RandomResizedCrop(512, 512, (0.5, 1.0), p=0.5),
+    # RandomResizedCrop(512, 512, (0.5, 1.0), p=0.5),
+    RandomResizedCrop(500, 500, (0.5, 1.0), p=0.5),
+    Resize(height=500, width=500),
     ShiftScaleRotate(shift_limit=0.2, scale_limit=0.2, rotate_limit=20, border_mode=cv2.BORDER_CONSTANT, value=0.0,
                      p=0.8),
     # HorizontalFlip(p = 0.5),
@@ -68,14 +70,10 @@ transform_train = Compose([
 
 
 transform_val = Compose([
+    Resize(height=500, width=500),
     Lambda(image=sample_normalize),
     ToTensorV2(),
 ])
-
-
-def read_grad(path):
-    img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-    return img.reshape((8, 512, 512)).transpose(1, 2, 0)
 
 
 class BAATrainDataset(Dataset):
@@ -157,7 +155,9 @@ def map_fn(flags, data_dir, k):
     train_df = pd.read_csv(os.path.join(fold_path, 'train.csv'))
     val_df = pd.read_csv(os.path.join(fold_path, 'valid.csv'))
 
-    train_set, val_set = create_data_loader(train_df, val_df, os.path.join(fold_path, 'train'), os.path.join(fold_path, 'valid'))
+    # train_set, val_set = create_data_loader(train_df, val_df, os.path.join(fold_path, 'train'), os.path.join(fold_path, 'valid'))
+    train_set, val_set = create_data_loader(train_df, val_df, os.path.join(fold_path, 'train'),
+                                            os.path.join(fold_path, 'valid'))
     print(train_set.__len__())
 
     ## Trains
@@ -199,14 +199,14 @@ if __name__ == "__main__":
     flags = {}
     flags['lr'] = 0.
     flags['batch_size'] = 32
-    # flags['num_workers'] = 6
-    flags['num_epochs'] = 16
+    flags['num_workers'] = 8
+    # flags['num_epochs'] = 16
     flags['seed'] = 1
 
     train_df = pd.read_csv(f'../../archive/boneage-training-dataset.csv')
-    train_ori_dir = '../../../autodl-tmp/MaskAll_fold/'
+    # train_ori_dir = '../../../autodl-tmp/MaskAll_fold/'
     # train_ori_dir = '../../archive/grad_1K_fold/'
-    # train_ori_dir = '../../archive/masked_1K_fold/'
+    train_ori_dir = '../../archive/masked_1K_fold/'
     # only run one fold
     print(f'load Ori')
     map_fn(flags, data_dir=train_ori_dir, k=1)

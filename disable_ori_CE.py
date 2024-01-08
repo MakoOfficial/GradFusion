@@ -139,7 +139,7 @@ class BAATrainDataset(Dataset):
         row = self.df.iloc[index]
         num = int(row['id'])
         return (transform_train(image=read_grad(f"{self.file_path}/{num}.png"))['image'],
-                Tensor([row['male']])), Tensor([row['boneage']]).to(torch.int64)
+                Tensor([row['male']])), row['boneage']
 
     def __len__(self):
         return len(self.df)
@@ -195,12 +195,11 @@ def train_fn(net, train_loader, loss_fn, epoch, optimizer):
 
     net.train()
     for batch_idx, data in enumerate(train_loader):
-        batch_start = time.time()
         image, gender = data[0]
         image, gender = image.type(torch.FloatTensor).cuda(), gender.type(torch.FloatTensor).cuda()
 
         batch_size = len(data[1])
-        label = F.one_hot(data[1]-1, num_classes=230).float().cuda()
+        label = (data[1]-1).type(torch.LongTensor).cuda()
 
         # zero the parameter gradients
         optimizer.zero_grad()
@@ -257,7 +256,7 @@ def reduce_fn(vals):
 import time
 
 def map_fn(flags, data_dir, k):
-    model_name = f'disori_CE_fold{k}'
+    model_name = f'disori_CE_8K'
     # path = f'{root}/{model_name}_fold{k}'
     # Sets a common random seed - both for initialization and ensuring graph is the same
     # seed_everything(seed=flags['seed'])
@@ -271,7 +270,7 @@ def map_fn(flags, data_dir, k):
     #   mymodel.load_state_dict(torch.load('/content/drive/My Drive/BAA/resnet50_pr_2/best_resnet50_pr_2.bin'))
     # mymodel = nn.DataParallel(mymodel.cuda(), device_ids=gpus, output_device=gpus[0])
 
-    fold_path = os.path.join(data_dir, f'fold_{k}')
+    fold_path = "../../autodl-tmp/grad_fold_1"
     train_df = pd.read_csv(os.path.join(fold_path, 'train.csv'))
     val_df = pd.read_csv(os.path.join(fold_path, 'valid.csv'))
 
@@ -303,7 +302,8 @@ def map_fn(flags, data_dir, k):
     best_loss = float('inf')
     #   loss_fn =  nn.MSELoss(reduction = 'sum')
     # loss_fn = nn.L1Loss(reduction='sum')
-    loss_fn = nn.BCELoss(reduction='sum')
+    # loss_fn = nn.BCELoss(reduction='sum')
+    loss_fn = nn.CrossEntropyLoss(reduction='sum')
     lr = flags['lr']
 
     wd = 0
@@ -418,7 +418,7 @@ if __name__ == "__main__":
     parser.add_argument('num_epochs', type=int)
     parser.add_argument('seed', type=int)
     args = parser.parse_args()
-    save_path = '../../autodl-tmp/disOri_CE'
+    save_path = '../../autodl-tmp/disOri_CE_8K'
     os.makedirs(save_path, exist_ok=True)
 
 
@@ -432,8 +432,8 @@ if __name__ == "__main__":
     train_df = pd.read_csv(f'../archive/boneage-training-dataset.csv')
     boneage_mean = train_df['boneage'].mean()
     boneage_div = train_df['boneage'].std()
-    train_ori_dir = '../../autodl-tmp/MaskAll_fold/'
+    train_ori_dir = '../../autodl-tmp/grad_fold_1/'
     # train_ori_dir = '../../autodl-tmp/ori_4K_fold/'
     # train_ori_dir = '../archive/masked_1K_fold/'
-    print(f'fold 1/5')
+    print(f'start')
     map_fn(flags, data_dir=train_ori_dir, k=1)
