@@ -426,7 +426,7 @@ def map_fn(flags, data_dir, grad_dir, k):
 
 
 if __name__ == "__main__":
-    from grad_field import fusion_ori_grad
+    from model import fusion_ori_grad
     import argparse
 
     parser = argparse.ArgumentParser()

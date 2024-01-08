@@ -177,7 +177,7 @@ class ResNet50(nn.Module):
         return l1_out, l2_out, l3_out, l4_out, fea
 
 
-class fusion_ori_grad(nn.Module):
+class fusion(nn.Module):
 
     def __init__(self, batch_size, ) -> None:
         super().__init__()
@@ -242,7 +242,7 @@ class ContrastiveLoss(nn.Module):
         return loss
 
 
-class disGrad(nn.Module):
+class oriBranchNet(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
@@ -278,7 +278,19 @@ class disGrad(nn.Module):
 
         return self.MLP(torch.cat((ori_feature, gender_encode), dim=-1))
 
-class disOri(nn.Module):
+    def teach_IRG(self, ori, gender):
+        l1, l2, l3, l4, ori_feature = self.oriEmbed(ori)
+        gender_encode = self.gender_encoder(gender)
+
+        return l1, l2, l3, l4, ori_feature, self.MLP(torch.cat((ori_feature, gender_encode), dim=-1))
+
+    def teach_Logit(self, ori, gender):
+        l1, l2, l3, l4, ori_feature = self.oriEmbed(ori)
+        gender_encode = self.gender_encoder(gender)
+
+        return self.MLP(torch.cat((ori_feature, gender_encode), dim=-1))
+
+class gradBranchNet(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
@@ -356,7 +368,7 @@ if __name__ == '__main__':
     ori = torch.randn(2, 1, 512, 512)
     grad = torch.randn(2, 8, 512, 512)
     gender = torch.randn(2, 1)
-    net = disGrad()
+    net = oriBranchNet()
     # out = net(ori, grad, gender)
     # print('out.shape: ', out.shape)
     # print(out)

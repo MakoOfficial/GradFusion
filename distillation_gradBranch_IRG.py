@@ -126,7 +126,7 @@ class BAATrainDataset(Dataset):
     def __init__(self, df, file_path):
         def preprocess_df(df):
             # nomalize boneage distribution
-            df['zscore'] = df['boneage'].map(lambda x: (x - boneage_mean) / boneage_div)
+            # df['zscore'] = df['boneage'].map(lambda x: (x - boneage_mean) / boneage_div)
             # change the type of gender, change bool variable to float32
             df['male'] = df['male'].astype('float32')
             df['bonage'] = df['boneage'].astype('float32')
@@ -139,6 +139,7 @@ class BAATrainDataset(Dataset):
         row = self.df.iloc[index]
         num = int(row['id'])
         return (transform_train(image=read_grad(f"{self.file_path}/{num}.png"))['image'],
+                # Tensor([row['male']])), Tensor([row['boneage']]).to(torch.int64)
                 Tensor([row['male']])), row['boneage']
 
     def __len__(self):
@@ -186,7 +187,7 @@ def L1_penalty(net, alpha):
 #     return alpha * loss
 
 
-def train_fn(net, train_loader, loss_fn, epoch, optimizer):
+def train_fn(net, teacher, train_loader, loss_fn, criterionKD, epoch, optimizer):
     '''
     checkpoint is a dict
     '''
@@ -204,17 +205,22 @@ def train_fn(net, train_loader, loss_fn, epoch, optimizer):
         # zero the parameter gradients
         optimizer.zero_grad()
         # forward
-        y_pred = net(image, gender)
+        l1_s, l2_s, l3_s, l4_s, fea_s, y_pred = net(image, gender)
         y_pred = y_pred.squeeze()
         label = label.squeeze()
-        # print(y_pred, label)
-        loss = loss_fn(y_pred, label)
+        cls_loss = loss_fn(y_pred, label)
+        l1_t, l2_t, l3_t, l4_t, fea_t, soft_logit = teacher.teach_IRG(image, gender)
+        kd_loss = criterionKD([l3_s, l4_s, fea_s, y_pred],
+                              [l3_t.detach(),
+                               l4_t.detach(),
+                               fea_t.detach(),
+                               soft_logit.detach()]) * lambda_kd
         # backward,calculate gradients
-        total_loss = loss + L1_penalty(net, 1e-5)
+        total_loss = cls_loss + kd_loss + L1_penalty(net, 1e-5)
         total_loss.backward()
         # backward,update parameter
         optimizer.step()
-        batch_loss = loss.item()
+        batch_loss = total_loss.data.item()
 
         training_loss += batch_loss
         total_size += batch_size
@@ -235,7 +241,7 @@ def evaluate_fn(net, val_loader):
 
             label = data[1].cuda()
 
-            y_pred = net(image, gender)
+            l1_out, l2_out, l3_out, l4_out, fea, y_pred = net(image, gender)
             # y_pred = net(image, gender)
             y_pred = torch.argmax(y_pred.cpu(), dim=1)+1
             label = label.cpu()
@@ -256,7 +262,7 @@ def reduce_fn(vals):
 import time
 
 def map_fn(flags, data_dir, k):
-    model_name = f'disori_CE_8K'
+    model_name = f'res18_distillation{k}'
     # path = f'{root}/{model_name}_fold{k}'
     # Sets a common random seed - both for initialization and ensuring graph is the same
     # seed_everything(seed=flags['seed'])
@@ -266,11 +272,13 @@ def map_fn(flags, data_dir, k):
     # torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 
     #   mymodel = BAA_base(32)
-    mymodel = disOri().cuda()
-    #   mymodel.load_state_dict(torch.load('/content/drive/My Drive/BAA/resnet50_pr_2/best_resnet50_pr_2.bin'))
+    mymodel = ResNet18().cuda()
+    teacher = disOri().cuda()
+    print(teacher.load_state_dict(torch.load('./disori_CE_fold1.bin'), strict=True))
+    teacher.eval()
     # mymodel = nn.DataParallel(mymodel.cuda(), device_ids=gpus, output_device=gpus[0])
 
-    fold_path = "../../autodl-tmp/grad_fold_1"
+    fold_path = os.path.join(data_dir, f'fold_{k}')
     train_df = pd.read_csv(os.path.join(fold_path, 'train.csv'))
     val_df = pd.read_csv(os.path.join(fold_path, 'valid.csv'))
 
@@ -304,6 +312,7 @@ def map_fn(flags, data_dir, k):
     # loss_fn = nn.L1Loss(reduction='sum')
     # loss_fn = nn.BCELoss(reduction='sum')
     loss_fn = nn.CrossEntropyLoss(reduction='sum')
+    criterionKD = IRG()
     lr = flags['lr']
 
     wd = 0
@@ -325,7 +334,7 @@ def map_fn(flags, data_dir, k):
         val_total_size = torch.tensor([0], dtype=torch.float32)
 
         start_time = time.time()
-        train_fn(mymodel, train_loader, loss_fn, epoch, optimizer)
+        train_fn(mymodel, teacher, train_loader, loss_fn, criterionKD, epoch, optimizer)
 
         ## Evaluation
         # Sets net to eval and no grad context
@@ -354,7 +363,7 @@ def map_fn(flags, data_dir, k):
             batch_size = len(data[1])
             label = data[1].cuda()
 
-            y_pred = mymodel(image, gender)
+            l1_out, l2_out, l3_out, l4_out, fea, y_pred = mymodel(image, gender)
 
             output = torch.argmax(y_pred.cpu(), dim=1) + 1
             label = label.cpu()
@@ -387,7 +396,7 @@ def map_fn(flags, data_dir, k):
             batch_size = len(data[1])
             label = data[1].cuda()
 
-            y_pred = mymodel(image, gender)
+            l1_out, l2_out, l3_out, l4_out, fea, y_pred = mymodel(image, gender)
 
             output = torch.argmax(y_pred.cpu(), dim=1) + 1
             label = label.cpu()
@@ -409,7 +418,9 @@ def map_fn(flags, data_dir, k):
 
 
 if __name__ == "__main__":
-    from grad_field import disOri
+    from model import disOri
+    from resnet import ResNet18
+    from utils.func import IRG
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -418,22 +429,28 @@ if __name__ == "__main__":
     parser.add_argument('num_epochs', type=int)
     parser.add_argument('seed', type=int)
     args = parser.parse_args()
-    save_path = '../../autodl-tmp/disOri_CE_8K'
+    save_path = '../../autodl-tmp/distillation_disOri_IRG'
     os.makedirs(save_path, exist_ok=True)
 
 
     flags = {}
     flags['lr'] = args.lr
     flags['batch_size'] = args.batch_size
-    flags['num_workers'] = 8
+    flags['num_workers'] = 16
     flags['num_epochs'] = args.num_epochs
     flags['seed'] = args.seed
+    lambda_kd = 1.0
 
     train_df = pd.read_csv(f'../archive/boneage-training-dataset.csv')
-    boneage_mean = train_df['boneage'].mean()
-    boneage_div = train_df['boneage'].std()
-    train_ori_dir = '../../autodl-tmp/grad_fold_1/'
-    # train_ori_dir = '../../autodl-tmp/ori_4K_fold/'
-    # train_ori_dir = '../archive/masked_1K_fold/'
-    print(f'start')
+    train_ori_dir = '../../autodl-tmp/grad_4K_fold/'
+    # only run one fold
+    print(f'fold 1/5')
     map_fn(flags, data_dir=train_ori_dir, k=1)
+    # print(f'fold 2/5')
+    # map_fn(flags, data_dir=train_ori_dir, k=2)
+    # print(f'fold 3/5')
+    # map_fn(flags, data_dir=train_ori_dir, k=3)
+    # print(f'fold 4/5')
+    # map_fn(flags, data_dir=train_ori_dir, k=4)
+    # print(f'fold 5/5')
+    # map_fn(flags, data_dir=train_ori_dir, k=5)

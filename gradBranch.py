@@ -1,63 +1,31 @@
 import csv
-import numpy as np
-import pandas as pd
-import os, sys, random
+import os
 import numpy as np
 import pandas as pd
 import cv2
-import shutil
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torchvision import transforms
 from torch import Tensor
 
-from torch.utils.data import Dataset, DataLoader
-from torch.utils.data.dataloader import _utils
-
-from random import choice
-
-from skimage import io
-from PIL import Image, ImageOps
-
-import glob
-
-# from torchsummary import summary
-import logging
-
-import matplotlib.pyplot as plt
+from torch.utils.data import Dataset
 
 import torch.nn.functional as F
 from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
-import torchvision.models as models
-# from tqdm.notebook import tqdm
-from tqdm import tqdm
-from sklearn.utils import shuffle
-# from apex import amp
 
 import random
 
-import time
-
 from torch.optim.lr_scheduler import StepLR
-from torch.nn.parameter import Parameter
 
 from albumentations.augmentations.transforms import Lambda, Normalize, RandomBrightnessContrast
 from albumentations.augmentations.geometric.transforms import ShiftScaleRotate, HorizontalFlip
 from albumentations.pytorch.transforms import ToTensorV2
 from albumentations.augmentations.crops.transforms import RandomResizedCrop
-from albumentations import Compose, OneOrOther
-
-import albumentations
+from albumentations import Compose
 
 import warnings
 
-import torchvision
-from torchvision import datasets
 import torchvision.transforms as transforms
-import time
 from utils.func import print
 
 warnings.filterwarnings("ignore")
@@ -76,7 +44,6 @@ torch.backends.cudnn.deterministic = True
 # 设置这个flag可以让内置的cuDNN的auto-tuner自动寻找最适合当前配置的高效算法，来达到优化运行效率的问题。
 # 但是由于噪声和不同的硬件条件，即使是同一台机器，benchmark都可能会选择不同的算法。为了消除这个随机性，设置为 False
 torch.backends.cudnn.benchmark = False
-
 
 norm_mean = [0.143]  # 0.458971
 norm_std = [0.144]  # 0.225609
@@ -117,20 +84,16 @@ transform_val = Compose([
 ])
 
 
-def read_image_Image(path):
-    img = Image.open(path)
-    return np.array(img.convert("RGB"))
-
-def read_image(path):
-    img = cv2.imread(path, cv2.IMREAD_COLOR)
-    return img
+def read_grad(path):
+    img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+    return img.reshape((8, 512, 512)).transpose(1, 2, 0)
 
 
 class BAATrainDataset(Dataset):
     def __init__(self, df, file_path):
         def preprocess_df(df):
             # nomalize boneage distribution
-            # df['zscore'] = df['boneage'].map(lambda x: (x - boneage_mean) / boneage_div)
+            df['zscore'] = df['boneage'].map(lambda x: (x - boneage_mean) / boneage_div)
             # change the type of gender, change bool variable to float32
             df['male'] = df['male'].astype('float32')
             df['bonage'] = df['boneage'].astype('float32')
@@ -142,10 +105,8 @@ class BAATrainDataset(Dataset):
     def __getitem__(self, index):
         row = self.df.iloc[index]
         num = int(row['id'])
-        # return (transform_train(image=read_image(f"{self.file_path}/{num}.png"))['image'],
-        #         Tensor([row['male']])), row['boneage']
-        return (transform_train(image=cv2.imread(f"{self.file_path}/{num}.png", cv2.IMREAD_COLOR))['image'],
-                Tensor([row['male']])), row['boneage']
+        return (transform_train(image=read_grad(f"{self.file_path}/{num}.png"))['image'],
+                Tensor([row['male']])), row['zscore']
 
     def __len__(self):
         return len(self.df)
@@ -164,8 +125,7 @@ class BAAValDataset(Dataset):
 
     def __getitem__(self, index):
         row = self.df.iloc[index]
-        # return (transform_val(image=read_image(f"{self.file_path}/{int(row['id'])}.png"))['image'],
-        return (transform_train(image=cv2.imread(f"{self.file_path}/{int(row['id'])}.png", cv2.IMREAD_COLOR))['image'],
+        return (transform_val(image=read_grad(f"{self.file_path}/{int(row['id'])}.png"))['image'],
                 Tensor([row['male']])), row['boneage']
 
     def __len__(self):
@@ -193,7 +153,7 @@ def L1_penalty(net, alpha):
 #     return alpha * loss
 
 
-def train_fn(net, teacher, train_loader, loss_fn, criterionKD, epoch, optimizer):
+def train_fn(net, train_loader, loss_fn, epoch, optimizer):
     '''
     checkpoint is a dict
     '''
@@ -206,25 +166,22 @@ def train_fn(net, teacher, train_loader, loss_fn, criterionKD, epoch, optimizer)
         image, gender = image.type(torch.FloatTensor).cuda(), gender.type(torch.FloatTensor).cuda()
 
         batch_size = len(data[1])
-        label = (data[1]-1).type(torch.LongTensor).cuda()
+        label = data[1].cuda()
 
         # zero the parameter gradients
         optimizer.zero_grad()
         # forward
-        l1_s, l2_s, l3_s, l4_s, fea_s, y_pred = net(image, gender)
+        y_pred = net(image, gender)
         y_pred = y_pred.squeeze()
         label = label.squeeze()
-        cls_loss = loss_fn(y_pred, label)
-        logit = teacher(image, gender)
-        kd_loss = criterionKD((y_pred / temper),
-                              F.softmax(logit.detach() / temper, dim=1)) * lambda_kd
+        # print(y_pred, label)
+        loss = loss_fn(y_pred, label)
         # backward,calculate gradients
-        total_loss = alpha*cls_loss + (1.-alpha)*kd_loss*temper*temper + L1_penalty(net, 1e-5)
-        # total_loss = kd_loss * temper * temper
+        total_loss = loss + L1_penalty(net, 1e-5)
         total_loss.backward()
         # backward,update parameter
         optimizer.step()
-        batch_loss = total_loss.item()
+        batch_loss = loss.item()
 
         training_loss += batch_loss
         total_size += batch_size
@@ -245,9 +202,9 @@ def evaluate_fn(net, val_loader):
 
             label = data[1].cuda()
 
-            l1_out, l2_out, l3_out, l4_out, fea, y_pred = net(image, gender)
+            y_pred = net(image, gender)
             # y_pred = net(image, gender)
-            y_pred = torch.argmax(y_pred.cpu(), dim=1)+1
+            y_pred = (y_pred.cpu() * boneage_div) + boneage_mean
             label = label.cpu()
 
             y_pred = y_pred.squeeze()
@@ -259,34 +216,18 @@ def evaluate_fn(net, val_loader):
     return mae_loss
 
 
-def reduce_fn(vals):
-    return sum(vals)
-
-
 import time
 
-def map_fn(flags, data_dir, k):
-    model_name = f'res18_ori{k}'
-    # path = f'{root}/{model_name}_fold{k}'
-    # Sets a common random seed - both for initialization and ensuring graph is the same
-    # seed_everything(seed=flags['seed'])
-
+def map_fn(flags):
     # Acquires the (unique) Cloud TPU core corresponding to this process's index
     # gpus = [0, 1]
     # torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 
-    #   mymodel = BAA_base(32)
-    mymodel = ResNet18(startChannel=3).cuda()
-    teacher = disGrad().cuda()
-    print(teacher.load_state_dict(torch.load('./disGrad_CE_fold1.bin'), strict=True))
-    teacher.eval()
+    mymodel = gradBranchNet().cuda()
+    # mymodel.load_state_dict(torch.load('/content/drive/My Drive/BAA/resnet50_pr_2/best_resnet50_pr_2.bin'))
     # mymodel = nn.DataParallel(mymodel.cuda(), device_ids=gpus, output_device=gpus[0])
 
-    fold_path = os.path.join(data_dir, f'fold_{k}')
-    train_df = pd.read_csv(os.path.join(fold_path, 'train.csv'))
-    val_df = pd.read_csv(os.path.join(fold_path, 'valid.csv'))
-
-    train_set, val_set = create_data_loader(train_df, val_df, os.path.join(fold_path, 'train'), os.path.join(fold_path, 'valid'))
+    train_set, val_set = create_data_loader(train_df, val_df, train_path, val_path)
     print(train_set.__len__())
     # Creates dataloaders, which load data in batches
     # Note: test loader is not shuffled or sampled
@@ -304,20 +245,10 @@ def map_fn(flags, data_dir, k):
         num_workers=flags['num_workers'])
 
     ## Network, optimizer, and loss function creation
-
-    # Creates AlexNet for 10 classes
-    # Note: each process has its own identical copy of the model
-    #  Even though each model is created independently, they're also
-    #  created in the same way.
-
     global best_loss
     best_loss = float('inf')
     #   loss_fn =  nn.MSELoss(reduction = 'sum')
-    # loss_fn = nn.L1Loss(reduction='sum')
-    # loss_fn = nn.BCELoss(reduction='sum')
-    loss_fn = nn.CrossEntropyLoss(reduction='sum')
-    # criterionKD = nn.BCELoss(reduction='sum')
-    criterionKD = nn.CrossEntropyLoss(reduction='sum')
+    loss_fn = nn.L1Loss(reduction='sum')
     lr = flags['lr']
 
     wd = 0
@@ -339,17 +270,22 @@ def map_fn(flags, data_dir, k):
         val_total_size = torch.tensor([0], dtype=torch.float32)
 
         start_time = time.time()
-        train_fn(mymodel, teacher, train_loader, loss_fn, criterionKD, epoch, optimizer)
+        train_fn(mymodel, train_loader, loss_fn, epoch, optimizer)
 
         ## Evaluation
         # Sets net to eval and no grad context
         evaluate_fn(mymodel, val_loader)
 
         train_loss, val_mae = training_loss / total_size, mae_loss / val_total_size
+        if val_mae < best_loss:
+            best_loss = val_mae
         print(
             f'training loss is {train_loss}, val loss is {val_mae}, time : {time.time() - start_time}, lr:{optimizer.param_groups[0]["lr"]}')
         scheduler.step()
 
+    print(f'best loss: {best_loss}')
+
+    model_name = f'gradBranch_8K'
     torch.save(mymodel.state_dict(), '/'.join([save_path, f'{model_name}.bin']))
     # if use multi-gpu
     # torch.save(mymodel.module.state_dict(), '/'.join([save_path, f'{model_name}.bin']))
@@ -357,7 +293,7 @@ def map_fn(flags, data_dir, k):
     # save log
     with torch.no_grad():
         train_record = [['label', 'pred']]
-        train_record_path = os.path.join(save_path, f"train{k}.csv")
+        train_record_path = os.path.join(save_path, f"train.csv")
         train_length = 0.
         total_loss = 0.
         mymodel.eval()
@@ -368,10 +304,10 @@ def map_fn(flags, data_dir, k):
             batch_size = len(data[1])
             label = data[1].cuda()
 
-            l1_out, l2_out, l3_out, l4_out, fea, y_pred = mymodel(image, gender)
+            y_pred = mymodel(image, gender)
 
-            output = torch.argmax(y_pred.cpu(), dim=1) + 1
-            label = label.cpu()
+            output = (y_pred.cpu() * boneage_div) + boneage_mean
+            label = (label.cpu() * boneage_div) + boneage_mean
 
             output = torch.squeeze(output)
             label = torch.squeeze(label)
@@ -381,8 +317,8 @@ def map_fn(flags, data_dir, k):
 
             total_loss += F.l1_loss(output, label, reduction='sum').item()
             train_length += batch_size
-        print(f"length :{train_length}")
-        print(f'{k} fold final training loss: {round(total_loss / train_length, 3)}')
+        print(f"training dataset length :{train_length}")
+        print(f'final training loss: {round(total_loss / train_length, 3)}')
         with open(train_record_path, 'w', newline='') as csvfile:
             writer_train = csv.writer(csvfile)
             for row in train_record:
@@ -390,7 +326,7 @@ def map_fn(flags, data_dir, k):
 
     with torch.no_grad():
         val_record = [['label', 'pred']]
-        val_record_path = os.path.join(save_path, f"val{k}.csv")
+        val_record_path = os.path.join(save_path, f"val.csv")
         val_length = 0.
         val_loss = 0.
         mymodel.eval()
@@ -401,9 +337,9 @@ def map_fn(flags, data_dir, k):
             batch_size = len(data[1])
             label = data[1].cuda()
 
-            l1_out, l2_out, l3_out, l4_out, fea, y_pred = mymodel(image, gender)
+            y_pred = mymodel(image, gender)
 
-            output = torch.argmax(y_pred.cpu(), dim=1) + 1
+            output = (y_pred.cpu() * boneage_div) + boneage_mean
             label = label.cpu()
 
             output = torch.squeeze(output)
@@ -414,8 +350,8 @@ def map_fn(flags, data_dir, k):
 
             val_loss += F.l1_loss(output, label, reduction='sum').item()
             val_length += batch_size
-        print(f"length :{val_length}")
-        print(f'{k} fold final val loss: {round(val_loss / val_length, 3)}')
+        print(f"valid dataset length :{val_length}")
+        print(f'final val loss: {round(val_loss / val_length, 3)}')
         with open(val_record_path, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile)
             for row in val_record:
@@ -423,9 +359,7 @@ def map_fn(flags, data_dir, k):
 
 
 if __name__ == "__main__":
-    from grad_field import disGrad
-    from resnet import ResNet18
-    from utils.func import IRG
+    from model import gradBranchNet
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -434,7 +368,7 @@ if __name__ == "__main__":
     parser.add_argument('num_epochs', type=int)
     parser.add_argument('seed', type=int)
     args = parser.parse_args()
-    save_path = '../../autodl-tmp/distillation_disGrad_Logit'
+    save_path = '../../autodl-tmp/gradBranch_MAE_8K'
     os.makedirs(save_path, exist_ok=True)
 
 
@@ -444,21 +378,18 @@ if __name__ == "__main__":
     flags['num_workers'] = 8
     flags['num_epochs'] = args.num_epochs
     flags['seed'] = args.seed
-    lambda_kd = 1.0
-    temper = 3.0
-    alpha = 0.7
 
-    train_df = pd.read_csv(f'../archive/boneage-training-dataset.csv')
-    train_ori_dir = '../../autodl-tmp/masked_4K_fold/'
+    total_df = pd.read_csv(f'../archive/boneage-training-dataset.csv')
+    boneage_mean = total_df['boneage'].mean()
+    boneage_div = total_df['boneage'].std()
+
+    data_dir = '../../autodl-tmp/grad_fold_1/'
+    train_df = pd.read_csv(os.path.join(data_dir, 'train.csv'))
+    val_df = pd.read_csv(os.path.join(data_dir, 'valid.csv'))
+    train_path = os.path.join(data_dir, 'train')
+    val_path = os.path.join(data_dir, 'valid')
+
+    # train_ori_dir = '../../autodl-tmp/ori_4K_fold/'
     # train_ori_dir = '../archive/masked_1K_fold/'
-    # only run one fold
-    print(f'fold 1/5')
-    map_fn(flags, data_dir=train_ori_dir, k=1)
-    # print(f'fold 2/5')
-    # map_fn(flags, data_dir=train_ori_dir, k=2)
-    # print(f'fold 3/5')
-    # map_fn(flags, data_dir=train_ori_dir, k=3)
-    # print(f'fold 4/5')
-    # map_fn(flags, data_dir=train_ori_dir, k=4)
-    # print(f'fold 5/5')
-    # map_fn(flags, data_dir=train_ori_dir, k=5)
+    print(f'start')
+    map_fn(flags)
